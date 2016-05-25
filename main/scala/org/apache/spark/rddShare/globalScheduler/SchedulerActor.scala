@@ -1,6 +1,7 @@
-package org.apache.spark.rddShare.test
+package org.apache.spark.rddShare.globalScheduler
 
-import org.apache.spark.rddShare.test.SchedulerMessages.{JobStart, JobBegining, JobFinished}
+import org.apache.spark.rddShare.globalScheduler.SchedulerMessages.{JobStart, JobFinished, JobBegining}
+import org.apache.spark.rddShare.reuse.core.SimulateRDD
 import org.apache.spark.rpc._
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -25,10 +26,10 @@ class SchedulerActor(
 
   override def receive: PartialFunction[Any, Unit] = {
 
-    case JobBegining(nodes: String, job: RpcEndpointRef) => {
-      println("SchedulerActor.receive: I have got the message: " + nodes)
-      val appInfor = new JobInformation(nodes, job)
-      jobsInOneScheduling += appInfor
+    case JobBegining(nodes: Array[SimulateRDD], job: RpcEndpointRef) => {
+      println("SchedulerActor.receive: I have got the message from " + nodes)
+      val jobInfor = new JobInformation(nodes, job)
+      jobsInOneScheduling += jobInfor
       if ( jobsInOneScheduling.length == JOBS_NUMBER_IN_ONE_SCHEDULING ){
         scheduling()
         jobsInOneScheduling.clear()
@@ -40,12 +41,16 @@ class SchedulerActor(
       // which need to reuse the result of this job
       jobsInOneScheduling.find(p => p.job.equals(job)) match {
         case Some(job: JobInformation) => {
-          job.jobsDependentThisJob.foreach( jobInfo => jobInfo.job.send(JobStart("start")))
+          job.jobsDependentThisJob.foreach( jobInfo => jobInfo.job.send(JobStart(jobInfo.rewrite.toArray[(Int, String)])))
         }
         case _ => {
           println("SchedulerActor.receive.JobFinished: I can't find the finished job in my received jobs")
         }
       }
+    }
+
+    case _ => {
+      println("SchedulerActor.receive._: I can't resolve this message.")
     }
   }
 
@@ -56,9 +61,10 @@ class SchedulerActor(
 
 }
 
-class JobInformation(val nodes: String, val job: RpcEndpointRef){
+class JobInformation(val nodes: Array[SimulateRDD], val job: RpcEndpointRef){
 
   val jobsDependentThisJob = new ArrayBuffer[JobInformation]()
+  val rewrite = new ArrayBuffer[(Int, String)]
 
 }
 
@@ -66,24 +72,21 @@ object SchedulerActor{
 
   val SYSTEM_NAME="rddShareGLOBALSCHEDULER"
   val ENDPOINT_NAME="GLOBALSCHEDULER"
-  val PORT=333
+  val PORT=34110
 
   def main(argStrings: Array[String]) {
     val conf = new SparkConf
-    val rpcEnv = startRpcEnvAndEndpoint(Utils.localHostName(), PORT, conf, SYSTEM_NAME)
-    rpcEnv.setupEndpoint(ENDPOINT_NAME, new SchedulerActor(rpcEnv, rpcEnv.address))
+    val rpcEnv = startRpcEnvAndEndpoint(Utils.localHostName(), PORT, conf)
     rpcEnv.awaitTermination()
   }
 
   def startRpcEnvAndEndpoint(
                               host: String,
                               port: Int,
-                              conf: SparkConf,
-                              systemName: String): RpcEnv = {
+                              conf: SparkConf): RpcEnv = {
     val securityMgr = new SecurityManager(conf)
-    val config = RpcEnvConfig(conf, systemName, host, port, securityMgr, false)
-    val rpcEnvFactory = Utils.classForName("org.apache.spark.rpc.netty.NettyRpcEnvFactory").newInstance().asInstanceOf[RpcEnvFactory]
-    val rpcEnv = rpcEnvFactory.create(config)
+    val rpcEnv = RpcEnv.create(SYSTEM_NAME, host, port, conf, securityMgr)
+    rpcEnv.setupEndpoint(ENDPOINT_NAME, new SchedulerActor(rpcEnv, rpcEnv.address))
     rpcEnv
   }
 

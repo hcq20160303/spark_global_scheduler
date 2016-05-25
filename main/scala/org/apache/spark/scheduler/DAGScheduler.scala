@@ -14,13 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+
+import org.apache.spark.rddShare.globalScheduler.{App, SchedulerActor}
+import org.apache.spark.rddShare.reuse.core.RDDShare
 
 import scala.collection.Map
 import scala.collection.mutable.{HashMap, HashSet, Stack}
@@ -36,7 +38,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rpc.RpcTimeout
+import org.apache.spark.rpc.{RpcAddress, RpcTimeout}
 import org.apache.spark.storage._
 import org.apache.spark.util._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -607,7 +609,26 @@ class DAGScheduler(
       callSite: CallSite,
       resultHandler: (Int, U) => Unit,
       properties: Properties): Unit = {
+    // --- hcq bigin ---
+    var newRDD: RDD[T] = null
+    if ( !rdd.isCache ){
+      val schedulingRpcEnv = rdd.sparkContext.schedulingRpcEnv
+      schedulingRpcEnv.setupEndpoint(App.ENDPOINT_NAME,
+        new App(schedulingRpcEnv, rdd.sparkContext.appName, schedulingRpcEnv.address, RpcAddress.fromSparkURL("spark://192.168.1.105:" + SchedulerActor.PORT), rewrite))
+      //    appEndpoint
+      val rddShare = new RDDShare(rdd)
+      RDDShare.synchronized(rddShare.dagMatcherAndRewriter )
+      newRDD = rddShare.getFinalRDD.asInstanceOf[RDD[T]]
+      rddShare.getCache
+    }
     val start = System.nanoTime
+    var rddnew: RDD[T] = rdd
+    if ( newRDD != null){
+      println("DAGScheduler----: "+ newRDD.dependencies.toString() + " \t "+newRDD.name)
+      rddnew = newRDD
+    }
+    // --- hcq end ---
+
     val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
     waiter.awaitResult() match {
       case JobSucceeded =>

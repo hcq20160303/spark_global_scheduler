@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import org.apache.spark.rddShare.globalScheduler.App
+
 import scala.language.implicitConversions
 
 import java.io._
@@ -54,7 +56,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
-import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.rpc.{RpcEnv, RpcEndpointRef}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
   SparkDeploySchedulerBackend, SimrSchedulerBackend}
@@ -456,6 +458,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
     SparkEnv.set(_env)
+
+    // --- hcq begin ---
+    // create the scheduling rpc envrionment
+    schedulingRpcEnv = App.startRpcEnv(Utils.localHostName(), 0, _conf, appName)
+    // --- hcq end ---
 
     _metadataCleaner = new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, _conf)
 
@@ -2195,6 +2202,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // context as having finished construction.
   // NOTE: this must be placed at the end of the SparkContext constructor.
   SparkContext.setActiveContext(this, allowMultipleContexts)
+
+  // --- hcq begin ---
+
+  var schedulingRpcEnv: RpcEnv = null
+  // --- hcq end ---
 }
 
 /**
