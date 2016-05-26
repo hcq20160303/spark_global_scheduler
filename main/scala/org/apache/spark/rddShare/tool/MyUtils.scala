@@ -1,4 +1,4 @@
-package org.apache.spark.rddShare.reuse.tool
+package org.apache.spark.rddShare.tool
 
 import java.io._
 

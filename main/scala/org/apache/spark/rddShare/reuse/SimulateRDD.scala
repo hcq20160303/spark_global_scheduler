@@ -1,4 +1,4 @@
-package org.apache.spark.rddShare.reuse.core
+package org.apache.spark.rddShare.reuse
 
 import java.util.ArrayList
 

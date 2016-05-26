@@ -1,9 +1,8 @@
-package org.apache.spark.rddShare.reuse.test
+package org.apache.spark.rddShare.test
 
 import java.util
 import java.util.function.Consumer
-
-import org.apache.spark.rddShare.reuse.core.SimulateRDD
+import org.apache.spark.rddShare.reuse.SimulateRDD
 import org.json4s._
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.{read, write}

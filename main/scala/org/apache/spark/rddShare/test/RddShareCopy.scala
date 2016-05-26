@@ -1,4 +1,4 @@
-package org.apache.spark.rddShare.reuse.test
+package org.apache.spark.rddShare.test
 
 import java.sql.{ResultSet, DriverManager}
 

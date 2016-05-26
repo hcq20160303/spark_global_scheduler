@@ -1,8 +1,7 @@
-package org.apache.spark.rddShare.reuse.core
+package org.apache.spark.rddShare.reuse
 
 import java.io._
 import java.sql.{DriverManager, ResultSet}
-import java.util
 import java.util._
 import java.util.function.Consumer
 
@@ -111,18 +110,6 @@ object CacheManager {
   private val repository: TreeSet[CacheMetaData] = new TreeSet[CacheMetaData](comp)
 
   def initRepository: Unit = {
-    // load the history cacheMetaData to repository from disk if rddShare system has the history data
-//    if (Files.exists(Paths.get(confPath+"/conf/rddShare/repository"))){
-//      val input = new ObjectInputStream(new FileInputStream(confPath+"/conf/rddShare/repository"))
-//      val repo = input.readObject().asInstanceOf[TreeSet[CacheMetaData]]
-//      input.close()
-//      val ite = repo.iterator()
-//      while (ite.hasNext){
-//        val cache = ite.next()
-//        repository.add(cache)
-//        repositorySize += cache.sizeOfOutputData
-//      }
-//    }
 
     try {
       // Configure to be Read Only
@@ -135,7 +122,7 @@ object CacheManager {
         // deserilize the nodesList & indexofDagScan
         implicit val formats = Serialization.formats(NoTypeHints)
         val nodesList = read[Array[SimulateRDD]](rs.getString("nodesList"))
-        val indexOfDagScan = read[util.ArrayList[Integer]](rs.getString("indexOfDagScan"))
+        val indexOfDagScan = read[Array[Int]](rs.getString("indexOfDagScan"))
         val outputFileLastModifiedTime = rs.getLong("outputFileLastModifiedTime")
         val sizeOfOutputData = rs.getDouble("sizeOfOutputData")
         val exeTimeOfDag = rs.getLong("exeTimeOfDag")
@@ -166,19 +153,6 @@ object CacheManager {
     repositorySize = 0
     initRepository
   }
-//  def saveRepository: Unit ={
-//    val output = new ObjectOutputStream(new FileOutputStream(confPath+"/conf/rddShare/repository"))
-//    output.writeObject(repository)
-//    output.close()
-//    println("CacheManager.scala---saveRepository")
-//    println("repositorySize: "+ repositorySize + "\trepository.size(): " + repository.size())
-//    repository.forEach(new Consumer[CacheMetaData] {
-//      override def accept(t: CacheMetaData): Unit = {
-//        println("nodesList(0).inputFileName:" + t.nodesList(0).inputFileName + "\t" +
-//          "sizoOfOutputData: " + t.sizeOfOutputData + "\tuse: " + t.reuse)
-//      }
-//    })
-//  }
 
   def checkCapacityEnoughElseReplace(addCache: CacheMetaData): Unit = {
 
@@ -265,9 +239,9 @@ object CacheManager {
                 }else if ( o1.nodesList.length > o2.nodesList.length){
                   return 1
                 }else{
-                  if ( o1.indexOfDagScan.size() < o2.indexOfDagScan.size() ){  // rule 5
+                  if ( o1.indexOfDagScan.length < o2.indexOfDagScan.length ){  // rule 5
                     return -1
-                  }else if ( o1.indexOfDagScan.size() > o2.indexOfDagScan.size() ){
+                  }else if ( o1.indexOfDagScan.length > o2.indexOfDagScan.length ){
                     return 1
                   }else{
                     return o1.outputFilename.compare(o2.outputFilename)   // rule 5

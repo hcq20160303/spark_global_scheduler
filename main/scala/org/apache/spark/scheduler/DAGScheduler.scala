@@ -22,10 +22,9 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.rddShare.globalScheduler.{App, SchedulerActor}
-import org.apache.spark.rddShare.reuse.core.RDDShare
 
 import scala.collection.Map
-import scala.collection.mutable.{HashMap, HashSet, Stack}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Stack}
 import scala.concurrent.duration._
 import scala.language.existentials
 import scala.language.postfixOps
@@ -610,26 +609,23 @@ class DAGScheduler(
       resultHandler: (Int, U) => Unit,
       properties: Properties): Unit = {
     // --- hcq bigin ---
-    var newRDD: RDD[T] = null
+    var newRDD: RDD[T] = rdd
     if ( !rdd.isCache ){
+      // create a rpcEnv to connect to Global Scheduler
       val schedulingRpcEnv = rdd.sparkContext.schedulingRpcEnv
       schedulingRpcEnv.setupEndpoint(App.ENDPOINT_NAME,
-        new App(schedulingRpcEnv, rdd.sparkContext.appName, schedulingRpcEnv.address, RpcAddress.fromSparkURL("spark://192.168.1.105:" + SchedulerActor.PORT), rewrite))
-      //    appEndpoint
-      val rddShare = new RDDShare(rdd)
-      RDDShare.synchronized(rddShare.dagMatcherAndRewriter )
-      newRDD = rddShare.getFinalRDD.asInstanceOf[RDD[T]]
-      rddShare.getCache
-    }
-    val start = System.nanoTime
-    var rddnew: RDD[T] = rdd
-    if ( newRDD != null){
-      println("DAGScheduler----: "+ newRDD.dependencies.toString() + " \t "+newRDD.name)
-      rddnew = newRDD
+        new App(schedulingRpcEnv, rdd.sparkContext.appName, schedulingRpcEnv.address,
+          RpcAddress.fromSparkURL("spark://192.168.1.105:" + SchedulerActor.PORT), rdd))
+      while( !rdd.isSchedule ){
+        // wait for scheduling in Global Scheduler
+      }
+      if ( rdd.newRDD != null ){
+        newRDD = rdd.newRDD.asInstanceOf[RDD[T]]
+      }
     }
     // --- hcq end ---
-
-    val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
+    val start = System.nanoTime
+    val waiter = submitJob(newRDD, func, partitions, callSite, resultHandler, properties)
     waiter.awaitResult() match {
       case JobSucceeded =>
         logInfo("Job %d finished: %s, took %f s".format

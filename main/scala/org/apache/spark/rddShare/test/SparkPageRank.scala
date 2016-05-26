@@ -16,7 +16,7 @@
  */
 
 // scalastyle:off println
-package org.apache.spark.rddShare.reuse.test
+package org.apache.spark.rddShare.test
 
 import org.apache.spark.{SparkConf, SparkContext}
 

@@ -1,7 +1,7 @@
-package org.apache.spark.rddShare.reuse.test
+package org.apache.spark.rddShare.test
 
+import org.apache.spark.rddShare.reuse.CacheManager
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.rddShare.reuse.core.CacheManager
 
 /**
  * Created by hcq on 16-5-10.

@@ -1,7 +1,7 @@
 package org.apache.spark.rddShare.globalScheduler
 
 import org.apache.spark.rddShare.globalScheduler.SchedulerMessages.{JobStart, JobFinished, JobBegining}
-import org.apache.spark.rddShare.reuse.core.SimulateRDD
+import org.apache.spark.rddShare.reuse.SimulateRDD
 import org.apache.spark.rpc._
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -26,9 +26,9 @@ class SchedulerActor(
 
   override def receive: PartialFunction[Any, Unit] = {
 
-    case JobBegining(nodes: Array[SimulateRDD], job: RpcEndpointRef) => {
+    case JobBegining(nodes: Array[SimulateRDD], indexOfDagScan: Array[Int], job: RpcEndpointRef) => {
       println("SchedulerActor.receive: I have got the message from " + nodes)
-      val jobInfor = new JobInformation(nodes, job)
+      val jobInfor = new JobInformation(nodes, indexOfDagScan, job)
       jobsInOneScheduling += jobInfor
       if ( jobsInOneScheduling.length == JOBS_NUMBER_IN_ONE_SCHEDULING ){
         scheduling()
@@ -61,7 +61,9 @@ class SchedulerActor(
 
 }
 
-class JobInformation(val nodes: Array[SimulateRDD], val job: RpcEndpointRef){
+class JobInformation(val nodes: Array[SimulateRDD],
+                     val indexOfDagScan: Array[Int],
+                     val job: RpcEndpointRef){
 
   val jobsDependentThisJob = new ArrayBuffer[JobInformation]()
   val rewrite = new ArrayBuffer[(Int, String)]
