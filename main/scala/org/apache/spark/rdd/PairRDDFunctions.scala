@@ -21,6 +21,8 @@ import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.{Date, HashMap => JHashMap}
 
+import org.apache.spark.rddShare.tool.MyUtils
+
 import scala.collection.{Map, mutable}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -328,7 +330,20 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * parallelism level.
    */
   def reduceByKey(func: (V, V) => V): RDD[(K, V)] = self.withScope {
-    reduceByKey(defaultPartitioner(self), func)
+    val reduceRDD = reduceByKey(defaultPartitioner(self), func)
+    reduceRDD.transformation = "reduceByKey"
+    /**
+     * 1. When we involved textFile or objectFile use sc, these two method will generate two rdd,
+     * one is hadoopRDD, and other is map RDD, so we don't need to get the function of the latter.
+     * 2. Also as the interal Spark will generate lots of rdd, so we should exclude these rdd
+     */
+    if ( !(self.transformation.equals("textFile") || self.transformation.equals("objectFile") )  // exclude 1
+      && !func.getClass.toString.contains("org.apache") ){  // exclude 2
+    val fun = func.getClass.toString.split("\\.")
+      val input = func.getClass.getResourceAsStream(fun(fun.length-1))
+      reduceRDD.function = MyUtils.getFunctionOfRDD(input, reduceRDD.sparkContext.hashCode() + fun(fun.length-1))
+    }
+    reduceRDD
   }
 
   /**
@@ -639,7 +654,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupByKey(): RDD[(K, Iterable[V])] = self.withScope {
-    groupByKey(defaultPartitioner(self))
+    val groupRDD = groupByKey(defaultPartitioner(self))
+    groupRDD.transformation = "groupByKey"
+    groupRDD.function = "groupByKey"
+    groupRDD
   }
 
   /**
@@ -648,7 +666,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * (k, v2) is in `other`. Performs a hash join across the cluster.
    */
   def join[W](other: RDD[(K, W)]): RDD[(K, (V, W))] = self.withScope {
-    join(other, defaultPartitioner(self, other))
+    val joinRDD = join(other, defaultPartitioner(self, other))
+    joinRDD.transformation = "join"
+    joinRDD.function = "join"
+    joinRDD
   }
 
   /**

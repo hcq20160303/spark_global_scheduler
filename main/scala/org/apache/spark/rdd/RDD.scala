@@ -19,6 +19,8 @@ package org.apache.spark.rdd
 
 import java.util.Random
 
+import org.apache.spark.rddShare.tool.MyUtils
+
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
@@ -322,7 +324,25 @@ abstract class RDD[T: ClassTag](
    */
   def map[U: ClassTag](f: T => U): RDD[U] = withScope {
     val cleanF = sc.clean(f)
-    new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.map(cleanF))
+    val mapRDD = new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.map(cleanF))
+    mapRDD.transformation = "map"
+    /**
+     * 1. When we involved textFile or objectFile use sc, these two method will generate two rdd,
+     * one is hadoopRDD, and other is map RDD, so we don't need to get the function of the latter.
+     * 2. Also as the interal Spark will generate lots of rdd, so we should exclude these rdd
+     */
+    if ( !(this.transformation.equals("textFile") || this.transformation.equals("objectFile") )  // exclude 1
+      && !f.getClass.toString.contains("org.apache") ){  // exclude 2
+    val fun = f.getClass.toString.split("\\.")
+      val input = f.getClass.getResourceAsStream(fun(fun.length-1))
+      mapRDD.function = MyUtils.getFunctionOfRDD(input, _sc.hashCode() + fun(fun.length-1))
+    }
+    // as when we involved sc.saveAsObjectFile(path), it will generate interal RDD,
+    // and it may involved this function, so we need to check if the parent rdd is cached
+    if ( this.isCache ){
+      mapRDD.isCache = true
+    }
+    mapRDD
   }
 
   /**
@@ -331,7 +351,20 @@ abstract class RDD[T: ClassTag](
    */
   def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] = withScope {
     val cleanF = sc.clean(f)
-    new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.flatMap(cleanF))
+    val flatMapRDD = new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.flatMap(cleanF))
+    flatMapRDD.transformation = "flatMap"
+    /**
+     * 1. When we involved textFile or objectFile use sc, these two method will generate two rdd,
+     * one is hadoopRDD, and other is map RDD, so we don't need to get the function of the latter.
+     * 2. Also as the interal Spark will generate lots of rdd, so we should exclude these rdd
+     */
+    if ( !(this.transformation.equals("textFile") || this.transformation.equals("objectFile") )  // exclude 1
+      && !f.getClass.toString.contains("org.apache") ){  // exclude 2
+    val fun = f.getClass.toString.split("\\.")
+      val input = f.getClass.getResourceAsStream(fun(fun.length-1))
+      flatMapRDD.function = MyUtils.getFunctionOfRDD(input, _sc.hashCode() + fun(fun.length-1))
+    }
+    flatMapRDD
   }
 
   /**
@@ -524,11 +557,15 @@ abstract class RDD[T: ClassTag](
    * times (use `.distinct()` to eliminate them).
    */
   def union(other: RDD[T]): RDD[T] = withScope {
+    var unionRDD: RDD[T] = null
     if (partitioner.isDefined && other.partitioner == partitioner) {
-      new PartitionerAwareUnionRDD(sc, Array(this, other))
+      unionRDD = new PartitionerAwareUnionRDD(sc, Array(this, other))
     } else {
-      new UnionRDD(sc, Array(this, other))
+      unionRDD = new UnionRDD(sc, Array(this, other))
     }
+    unionRDD.transformation = "union"
+    unionRDD.function = "union"
+    unionRDD
   }
 
   /**
