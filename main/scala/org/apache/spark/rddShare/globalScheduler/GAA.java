@@ -13,6 +13,9 @@ public class GAA{
     private int DAG_num; //DAG的数目，需要提前进行统计
     private int Max_len; //最大迭代次数
     private int Now_len; //当前迭代次数
+    /**
+     * questions 2: It's may be more suitable to using percent to represent the reuse matrix
+     */
     private int [][]reuse; //重用度矩阵，需要提前统计
     private int [] Best_result; //最佳个体
     private int [][] Best_seq; //最佳个体序列
@@ -79,10 +82,18 @@ public class GAA{
     }
 
     //计算每个个体的重用度的大小
+    /**
+     * @param individual
+     * @return
+     */
     int caclReuse(int [] individual){
         int sum_reuse=0;
         for(int i=0;i<DAG_num-1;i++){
             for(int j=i+1;j<DAG_num;j++){
+                /**
+                 * question 1: the sum reuse, I think, can't sum all of the reuse of a dag to other dags,
+                 * just sum the biggest reuse is OK?
+                 */
                 sum_reuse=sum_reuse+reuse[individual[i]][individual[j]];
             }
         }
@@ -123,9 +134,16 @@ public class GAA{
         Arrays.sort(fitness);  //将适应度按照从小到大排序
         for(int i=scale-1;i>=scale*(1-Ps);i--){
             for(int j=0;j<scale;j++){
+                /**
+                 * question 4: what's the meaning?
+                 */
                 if(temp_queue[j]==fitness[i]){
                     Child_population[scale-1-i]=Parent_population[j];
                     if(i==scale-1){
+                        /**
+                         * question 5: Now_len++? why this inc is not after this statement:
+                         * Best_fit[Now_len]=fitness[i];
+                         */
                         Best_seq[Now_len++]=Parent_population[j];
                         Best_fit[Now_len]=fitness[i];
                     }
@@ -133,6 +151,9 @@ public class GAA{
             }
         }
         for(int i=(int)(scale*Ps);i>=0;i--){
+            /**
+             * question 3: why use child_population init itself? why not parent_population
+             */
             Child_population[i]=Child_population[random.nextInt((int)(scale*Ps))+(int)(scale*(1-Ps))+1];
         }
     }
