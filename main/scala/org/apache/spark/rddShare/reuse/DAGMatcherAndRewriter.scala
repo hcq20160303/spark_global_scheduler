@@ -1,6 +1,7 @@
 package org.apache.spark.rddShare.reuse
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rddShare.globalScheduler.JobInformation
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -11,6 +12,45 @@ import scala.collection.mutable.ArrayBuffer
  */
 
 object DAGMatcherAndRewriter {
+
+  // match two dags and get the index of match position in two dags
+  def matchTwoDags(dag1: JobInformation, dag2: JobInformation): ( (Int, Int), (Int, Int)) ={
+    val indexOfDagScan1 = dag1.indexOfDagScan
+    val nodes1 = dag1.nodes
+    val indexOfDagScan2 = dag2.indexOfDagScan
+    val nodes2 = dag2.nodes
+    // get the match index of dag1 with dag2
+    var dag1MatchBegin, dag1MatchEnd = 0
+    var dag2MatchBegin, dag2MatchEnd = 0
+    var maxMatch = -1
+
+    for ( id1 <- indexOfDagScan1 ){
+      for ( id2 <- indexOfDagScan2){
+        var isMatch = true
+        var id1Copy = id1
+        var id2Copy = id2
+        while ( (id1Copy < nodes1.length) && (id2Copy < nodes2.length) && isMatch){
+          if ( nodes1(id1Copy).equals(nodes2(id2Copy)) ){
+            id1Copy += 1
+            id2Copy += 1
+          }else{
+            isMatch = false
+          }
+        }
+        // match successfully
+        if ( id1Copy != id1 ){
+          if ( maxMatch < (id1Copy - id1) ){
+            maxMatch = id1Copy - id1
+            dag1MatchBegin = id1
+            dag1MatchEnd = id1Copy - 1
+            dag2MatchBegin = id2
+            dag2MatchEnd = id2Copy - 1
+          }
+        }
+      }
+    }
+    ( (dag1MatchBegin, dag1MatchEnd), (dag2MatchBegin, dag2MatchEnd))
+  }
 
 //  def dagMatcherAndRewriter(rddShare: RDDShare, finalRDD: RDD[_], nodesList: ArrayList[SimulateRDD], indexOfDagScan: ArrayList[Integer]): Unit = {
 //    transformDAGtoList(null, finalRDD, nodesList, indexOfDagScan)

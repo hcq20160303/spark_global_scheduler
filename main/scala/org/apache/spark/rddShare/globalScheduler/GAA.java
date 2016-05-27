@@ -162,6 +162,9 @@ public class GAA{
     int [][] rotate(int [][] new_population,int row,int column,int num){
         int [][] temp_array;
         temp_array=new_population;
+        /**
+         * question 6: whether the copy order is opposite
+         */
         System.arraycopy(new_population[row],num,temp_array[row],column,DAG_num-column);
         System.arraycopy(new_population[row],DAG_num-column,temp_array[row],num,column-num);
         return new_population;
@@ -266,6 +269,10 @@ public class GAA{
             mutate();
             //将新的后代复制到父代，进行下一轮的迭代
             for(int j=0;j<scale;j++){
+                /**
+                 * question 7: the length of copy "scale*DAG_num" is right?
+                 * in Child_population[j], the length is DAG_num, there is not enough element to copy.
+                 */
                 System.arraycopy(Child_population[j],0,Parent_population[j],0,scale*DAG_num);
             }
         }
