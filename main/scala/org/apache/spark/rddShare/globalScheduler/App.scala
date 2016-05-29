@@ -5,7 +5,7 @@ import java.util.function.Consumer
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rddShare.globalScheduler.SchedulerMessages.{JobBegining, JobStart}
-import org.apache.spark.rddShare.reuse.{Cacher, DAGMatcherAndRewriter, SimulateRDD}
+import org.apache.spark.rddShare.reuse.{DAGMatcherAndRewriter, SimulateRDD}
 import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
@@ -16,37 +16,28 @@ class App(override val rpcEnv: RpcEnv,
           val systemName: String,
           val address: RpcAddress,
           val globalScheduler: RpcAddress,
-          val rdd: RDD[_],
-          var nodes: Array[SimulateRDD] = null,
-          var indexOfDagScan: Array[Int] = Array(0)
+          val rdd: RDD[_]
            ) extends ThreadSafeRpcEndpoint with Logging {
 
-  override def onStart(): Unit ={
+  private val nodes = new util.ArrayList[SimulateRDD]
+  private val indexOfDagScan = new util.ArrayList[Integer]
 
+  override def onStart(): Unit ={
     // get the nodes and indexOfDagScan from dag
-    val nodesCopy = new util.ArrayList[SimulateRDD]
-    val indexOfDagScanCopy = new util.ArrayList[Int]
-    DAGMatcherAndRewriter.transformDAGtoList(null, rdd, nodesCopy, indexOfDagScanCopy)
-    println(nodesCopy.size() + "\t" + indexOfDagScanCopy.size())
-    nodes = new Array[SimulateRDD](nodesCopy.size())
-    var i =0
-    nodesCopy.forEach(new Consumer[SimulateRDD] {override def accept(t: SimulateRDD): Unit = {
-      nodes(i) = t
-      i += 1
-    }})
-//    indexOfDagScan = new Array[Int](indexOfDagScanCopy.size())
-//    i = 0
-//    indexOfDagScanCopy.forEach(new Consumer[Int] {
-//      override def accept(t: Int): Unit = {
-//        indexOfDagScan(i) = t
-//        i += 1
-//      }
-//    })
-    logInfo("nodes: "+nodes.foreach(x => x.toString()))
-    logInfo("indexOfDagScan: "+indexOfDagScan.foreach(x => x.toString()))
+    DAGMatcherAndRewriter.transformDAGtoList(null, rdd, nodes, indexOfDagScan)
+    println("nodes: "+nodes.forEach(new Consumer[SimulateRDD] {
+      override def accept(t: SimulateRDD): Unit = {
+        println(t.toString())
+      }
+    }))
+    println("indexOfDagScan: "+indexOfDagScan.forEach(new Consumer[Integer] {
+      override def accept(t: Integer): Unit = {
+        println(t.toString())
+      }
+    }))
     // send message to Global Scheduler to scheduling
     val globalSchedulerEndpoint = rpcEnv.setupEndpointRef(SchedulerActor.SYSTEM_NAME, globalScheduler, SchedulerActor.ENDPOINT_NAME)
-    globalSchedulerEndpoint.send(JobBegining(nodes.toArray, indexOfDagScan.toArray, self))
+    globalSchedulerEndpoint.send(JobBegining(nodes, indexOfDagScan, self))
     logInfo("App.onStart: hello, I have successfully sent the beginning message to global scheduler.")
 
   }
@@ -57,12 +48,12 @@ class App(override val rpcEnv: RpcEnv,
       logInfo("App.receive.JobStart: hello, I have received the start message from Global Scheduler")
       logInfo("App.receive.JobStart: Start rewrite")
       // rewrite the dag corresponding the job
-      DAGMatcherAndRewriter.rewriter(nodes.toArray, rewrite)
-      logInfo("App.receive.JobStart: Start cache")
-      // cache the rdds in this dag
-      Cacher.cache(nodes.toArray, cache)
+//      DAGMatcherAndRewriter.rewriter(nodes.toArray, rewrite)
+//      logInfo("App.receive.JobStart: Start cache")
+//      // cache the rdds in this dag
+//      Cacher.cache(nodes.toArray, cache)
       // change the scheduling state to true, then the DAGScheduler can submit this job
-      nodes.last.realRDD.isSchedule = true
+      nodes.get(nodes.size()-1).realRDD.isSchedule = true
     }
 
     case _ => {

@@ -1,6 +1,8 @@
 package org.apache.spark.rddShare.globalScheduler
 
 import java.io.File
+import java.util
+import java.util.function.Consumer
 
 import com.typesafe.config.ConfigFactory
 import org.apache.spark.rddShare.globalScheduler.SchedulerMessages.{JobBegining, JobFinished, JobStart}
@@ -34,11 +36,29 @@ class SchedulerActor(
 
   override def receive: PartialFunction[Any, Unit] = {
 
-    case JobBegining(nodes: Array[SimulateRDD], indexOfDagScan: Array[Int], job: RpcEndpointRef) => {
+    case JobBegining(nodes: util.ArrayList[SimulateRDD], indexOfDagScan: util.ArrayList[Integer], job: RpcEndpointRef) => {
       logInfo("SchedulerActor.receive: I have got the message from " + job.name)
-      logInfo("nodes: "+nodes.foreach(x => x.toString()))
-      logInfo("indexOfDagScan: "+indexOfDagScan.foreach(x => x.toString()))
-      val jobInfor = new JobInformation(nodes, indexOfDagScan, job)
+      val nodesArray = new Array[SimulateRDD](nodes.size())
+      val indexOfDagScanArray = new Array[Int](indexOfDagScan.size())
+      var i=0
+      nodes.forEach(new Consumer[SimulateRDD] {
+        override def accept(t: SimulateRDD): Unit = {
+          println(t.toString())
+          nodesArray(i) = t
+          i += 1
+        }
+      })
+      i = 0
+      indexOfDagScan.forEach(new Consumer[Integer] {
+        override def accept(t: Integer): Unit = {
+          println(t.toString())
+          indexOfDagScanArray(i) = t
+          i += 1
+        }
+      })
+      logInfo("nodes: "+nodesArray.foreach(x => x.toString()))
+      logInfo("indexOfDagScan: "+indexOfDagScanArray.foreach(x => x.toString()))
+      val jobInfor = new JobInformation(nodesArray, indexOfDagScanArray, job)
       jobsInOneScheduling += jobInfor
       if ( jobsInOneScheduling.length == SchedulerActor.JOBS_NUMBER_IN_ONE_SCHEDULING ){
         schedulingBasedGA()

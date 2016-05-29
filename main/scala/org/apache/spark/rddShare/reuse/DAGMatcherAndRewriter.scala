@@ -84,7 +84,7 @@ object DAGMatcherAndRewriter {
    * @param nodesList: the nodes of this dag
    * @param indexOfDagScan: the index of nodes which read data
    */
-  def transformDAGtoList( parent: RDD[_], node: RDD[_], nodesList: util.ArrayList[SimulateRDD], indexOfDagScan: util.ArrayList[Int] ): Unit = {
+  def transformDAGtoList( parent: RDD[_], node: RDD[_], nodesList: util.ArrayList[SimulateRDD], indexOfDagScan: util.ArrayList[Integer] ): Unit = {
 
     if ( node == null ){
       return
