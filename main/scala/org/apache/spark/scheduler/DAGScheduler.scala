@@ -21,26 +21,24 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.rddShare.globalScheduler.{App, SchedulerActor}
-
-import scala.collection.Map
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Stack}
-import scala.concurrent.duration._
-import scala.language.existentials
-import scala.language.postfixOps
-import scala.util.control.NonFatal
-
 import org.apache.commons.lang3.SerializationUtils
-
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rpc.{RpcAddress, RpcTimeout}
+import org.apache.spark.rddShare.globalScheduler.SchedulerMessages.JobFinished
+import org.apache.spark.rddShare.globalScheduler.{App, SchedulerActor}
+import org.apache.spark.rpc.{RpcEndpointRef, RpcAddress, RpcTimeout}
+import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.storage._
 import org.apache.spark.util._
-import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
+
+import scala.collection.Map
+import scala.collection.mutable.{HashMap, HashSet, Stack}
+import scala.concurrent.duration._
+import scala.language.{existentials, postfixOps}
+import scala.util.control.NonFatal
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -610,24 +608,30 @@ class DAGScheduler(
       properties: Properties): Unit = {
     // --- hcq bigin ---
     var newRDD: RDD[T] = rdd
+    var appActor: RpcEndpointRef = null
     if ( !rdd.isCache ){
-      // create a rpcEnv to connect to Global Scheduler
-      val schedulingRpcEnv = rdd.sparkContext.schedulingRpcEnv
-      schedulingRpcEnv.setupEndpoint(App.ENDPOINT_NAME,
-        new App(schedulingRpcEnv, rdd.sparkContext.appName, schedulingRpcEnv.address,
-          RpcAddress.fromSparkURL("spark://192.168.1.105:" + SchedulerActor.PORT), rdd))
-      while( !rdd.isSchedule ){
+      val rpcEnv = SparkEnv.get.rpcEnv
+      appActor = rpcEnv.setupEndpoint(App.ENDPOINT_NAME+rdd.transformation,
+                new App(rpcEnv, rdd.sparkContext.appName, rpcEnv.address,
+                  RpcAddress.fromSparkURL("spark://192.168.1.105:" + SchedulerActor.PORT), rdd))
+      while( !rdd.isSchedule && !newRDD.isSchedule){
         // wait for scheduling in Global Scheduler
+        if ( rdd.newRDD != null ){
+          newRDD = rdd.newRDD.asInstanceOf[RDD[T]]
+        }
       }
-      if ( rdd.newRDD != null ){
-        newRDD = rdd.newRDD.asInstanceOf[RDD[T]]
-      }
+      logInfo("---isSchedule: true")
     }
     // --- hcq end ---
     val start = System.nanoTime
     val waiter = submitJob(newRDD, func, partitions, callSite, resultHandler, properties)
     waiter.awaitResult() match {
       case JobSucceeded =>
+        // --- hcq begin ---
+        if ( appActor != null ){
+          appActor.send(JobFinished())
+        }
+        // --- hcq end ---
         logInfo("Job %d finished: %s, took %f s".format
           (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
       case JobFailed(exception: Exception) =>

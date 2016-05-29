@@ -10,7 +10,7 @@ object SchedulerMessages {
 
   // these messages are sent by apps
   case class JobBegining(nodes: Array[SimulateRDD], indexOfDagScan: Array[Int], job: RpcEndpointRef)
-  case class JobFinished(job: RpcEndpointRef)
+  case class JobFinished()
 
   // these messages are sent by global scheduler
   case class JobStart(rewrite: Array[(Int, String)], cache: Array[(Int, String)])

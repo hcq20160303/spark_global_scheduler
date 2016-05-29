@@ -459,11 +459,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _env = createSparkEnv(_conf, isLocal, listenerBus)
     SparkEnv.set(_env)
 
-    // --- hcq begin ---
-    // create the scheduling rpc envrionment
-    schedulingRpcEnv = App.startRpcEnv(Utils.localHostName(), 0, _conf, appName)
-    // --- hcq end ---
-
     _metadataCleaner = new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, _conf)
 
     _statusTracker = new SparkStatusTracker(this)
@@ -2211,11 +2206,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // context as having finished construction.
   // NOTE: this must be placed at the end of the SparkContext constructor.
   SparkContext.setActiveContext(this, allowMultipleContexts)
-
-  // --- hcq begin ---
-
-  var schedulingRpcEnv: RpcEnv = null
-  // --- hcq end ---
 }
 
 /**

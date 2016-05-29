@@ -1,12 +1,13 @@
 package org.apache.spark.rddShare.globalScheduler
 
+import java.util
+import java.util.function.Consumer
+
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rddShare.globalScheduler.SchedulerMessages.{JobStart, JobBegining}
+import org.apache.spark.rddShare.globalScheduler.SchedulerMessages.{JobBegining, JobStart}
 import org.apache.spark.rddShare.reuse.{Cacher, DAGMatcherAndRewriter, SimulateRDD}
 import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
-
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * Created by hcq on 16-5-23.
@@ -15,16 +16,34 @@ class App(override val rpcEnv: RpcEnv,
           val systemName: String,
           val address: RpcAddress,
           val globalScheduler: RpcAddress,
-          val rdd: RDD[_]
+          val rdd: RDD[_],
+          var nodes: Array[SimulateRDD] = null,
+          var indexOfDagScan: Array[Int] = Array(0)
            ) extends ThreadSafeRpcEndpoint with Logging {
-
-  private val nodes = new ArrayBuffer[SimulateRDD]
-  private val indexOfDagScan = new ArrayBuffer[Int]
 
   override def onStart(): Unit ={
 
     // get the nodes and indexOfDagScan from dag
-    DAGMatcherAndRewriter.transformDAGtoList(null, rdd, nodes, indexOfDagScan)
+    val nodesCopy = new util.ArrayList[SimulateRDD]
+    val indexOfDagScanCopy = new util.ArrayList[Int]
+    DAGMatcherAndRewriter.transformDAGtoList(null, rdd, nodesCopy, indexOfDagScanCopy)
+    println(nodesCopy.size() + "\t" + indexOfDagScanCopy.size())
+    nodes = new Array[SimulateRDD](nodesCopy.size())
+    var i =0
+    nodesCopy.forEach(new Consumer[SimulateRDD] {override def accept(t: SimulateRDD): Unit = {
+      nodes(i) = t
+      i += 1
+    }})
+//    indexOfDagScan = new Array[Int](indexOfDagScanCopy.size())
+//    i = 0
+//    indexOfDagScanCopy.forEach(new Consumer[Int] {
+//      override def accept(t: Int): Unit = {
+//        indexOfDagScan(i) = t
+//        i += 1
+//      }
+//    })
+    logInfo("nodes: "+nodes.foreach(x => x.toString()))
+    logInfo("indexOfDagScan: "+indexOfDagScan.foreach(x => x.toString()))
     // send message to Global Scheduler to scheduling
     val globalSchedulerEndpoint = rpcEnv.setupEndpointRef(SchedulerActor.SYSTEM_NAME, globalScheduler, SchedulerActor.ENDPOINT_NAME)
     globalSchedulerEndpoint.send(JobBegining(nodes.toArray, indexOfDagScan.toArray, self))

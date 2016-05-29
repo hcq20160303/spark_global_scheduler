@@ -13,7 +13,6 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization._
 
-import scala.io.Source
 import scala.tools.nsc.Properties
 
 /**
@@ -49,67 +48,9 @@ object CacheManager {
   def getRepositoryCapacity = repositoryCapacity
   var repositorySize: Double = 0  // the size of repository at now
 
-  // this used by repository to sort the cacheMetaDatas
-  private val TRANSFORMATION_PRIORITY: HashMap[String, Integer] = {
+  private val repository: TreeSet[CacheMetaData] = new TreeSet[CacheMetaData]()
 
-    val tranformtion_priority = new HashMap[String, Integer]
-
-    val jsonLines = Source.fromFile(confPath + "/conf/rddShare/transformation").getLines()
-    jsonLines.foreach( line => tranformtion_priority.put(line.split(" ")(0), line.split(" ")(1).toInt ))
-
-    tranformtion_priority
-  }
-  def tranformtion_priority = TRANSFORMATION_PRIORITY
-  val comp = new Comparator[CacheMetaData]() with Serializable{
-    /**
-     * 排序规则：
-     * 1. dag树的节点数量越多越靠前
-     * 2. “加载数据”操作符（Scan）越多，则越靠前
-     * 3. filename
-     * 4. 操作符优先级
-     * 为什么需要排序？是为了保证第一次匹配成功的dag就是最大匹配
-     */
-    def compare(o1: CacheMetaData, o2: CacheMetaData): Int = {
-      if (o1.nodesList.length > o2.nodesList.length ) {       // rule 1. dag树的节点数量越多越靠前
-        return -1
-      }
-      else if (o1.nodesList.length < o2.nodesList.length ) {
-        return 1
-      }
-      else {
-        val o1inputFilenames: ArrayList[String] = o1.root.inputFileName
-        val o2inputFilenames: ArrayList[String] = o2.root.inputFileName
-        if (o1inputFilenames.size > o2inputFilenames.size) {   // rule 2. “加载数据”操作符（Scan）越多，则越靠前
-          return -1
-        }
-        else if (o1inputFilenames.size < o2inputFilenames.size) {
-          return 1
-        }
-        else {
-          var compare: Int = 0
-          for( i <- 0 to o1inputFilenames.size-1){   // rule 3. filename
-            compare = o1inputFilenames.get(i).compareToIgnoreCase(o2inputFilenames.get(i))
-            if ( compare != 0 ){
-              return -compare
-            }
-          }
-
-          val o1allTransformation: ArrayList[String] = o1.root.allTransformation
-          val o2allTransformation: ArrayList[String] = o2.root.allTransformation
-          for ( i <- 0 to o1allTransformation.size-1) {   // rule 4. allTransoformation
-            compare = TRANSFORMATION_PRIORITY.get(o1allTransformation.get(i)) - TRANSFORMATION_PRIORITY.get(o2allTransformation.get(i))
-            if (compare != 0) {
-              return -compare
-            }
-          }
-          return 0
-        }
-      }
-    }
-  }
-  private val repository: TreeSet[CacheMetaData] = new TreeSet[CacheMetaData](comp)
-
-  def initRepository: Unit = {
+  private def initRepository: Unit = {
 
     try {
       // Configure to be Read Only
@@ -147,17 +88,11 @@ object CacheManager {
       }
     })
   }
-  def getRepository = repository
-  private def reinitRepositoryfromDatabase = {
-    repository.clear()
-    repositorySize = 0
-    initRepository
-  }
 
   def checkCapacityEnoughElseReplace(addCache: CacheMetaData): Unit = {
 
     // we must reget repository from database
-    reinitRepositoryfromDatabase
+    initRepository
 
     if ( addCache.sizeOfOutputData > repositoryCapacity ){
       println("CacheManager.scala---checkCapacityEnoughElseReplace")
@@ -320,6 +255,7 @@ object CacheManager {
     val statement = conn.createStatement()
     statement.executeUpdate(sql)
   }
+
   private def removeCacheFromDisk(pathCache: String): Unit = {
     println("CacheManager.scala---removeCacheFromDisk's remove path: " + pathCache)
     if ( repositoryBasePath.contains("hdfs")){   // delete the hdfs file
@@ -332,52 +268,52 @@ object CacheManager {
     }
   }
 
-  def fileExist(pathFile: String, fileType: String): Boolean ={
-    if ( pathFile.contains("hdfs")){  // hdfs system
-      val config = new Configuration()
-      val path = new Path(pathFile)
-      val hdfs = path.getFileSystem(config)
-      if ( !hdfs.exists(path) ){
-        removeCacheFromRepository(pathFile, fileType)
-        false
-      }else{
-        true
-      }
-    }else{  // local file
-      if (!(new File(pathFile).exists())){
-        removeCacheFromRepository(pathFile, fileType)
-        false
-      }else{
-        true
-      }
-    }
-  }
+//  def fileExist(pathFile: String, fileType: String): Boolean ={
+//    if ( pathFile.contains("hdfs")){  // hdfs system
+//      val config = new Configuration()
+//      val path = new Path(pathFile)
+//      val hdfs = path.getFileSystem(config)
+//      if ( !hdfs.exists(path) ){
+//        removeCacheFromRepository(pathFile, fileType)
+//        false
+//      }else{
+//        true
+//      }
+//    }else{  // local file
+//      if (!(new File(pathFile).exists())){
+//        removeCacheFromRepository(pathFile, fileType)
+//        false
+//      }else{
+//        true
+//      }
+//    }
+//  }
 
-  private def removeCacheFromRepository(inputFileName: String, fileType: String): Unit = {
-    val ite = repository.iterator()
-    fileType match {
-      case "input" => {
-        while ( ite.hasNext){
-          val cache = ite.next()
-          if ( cache.root.inputFileName.contains(inputFileName)){
-            deletefromDatabase(cache)
-            repositorySize -= cache.sizeOfOutputData
-            repository.remove(cache)
-          }
-        }
-      }
-      case "ouput" => {
-        while ( ite.hasNext){
-          val cache = ite.next()
-          if ( cache.outputFilename.equalsIgnoreCase(inputFileName)){
-            deletefromDatabase(cache)
-            repositorySize -= cache.sizeOfOutputData
-            repository.remove(cache)
-          }
-        }
-      }
-    }
-  }
+//  private def removeCacheFromRepository(inputFileName: String, fileType: String): Unit = {
+//    val ite = repository.iterator()
+//    fileType match {
+//      case "input" => {
+//        while ( ite.hasNext){
+//          val cache = ite.next()
+//          if ( cache.root.inputFileName.contains(inputFileName)){
+//            deletefromDatabase(cache)
+//            repositorySize -= cache.sizeOfOutputData
+//            repository.remove(cache)
+//          }
+//        }
+//      }
+//      case "ouput" => {
+//        while ( ite.hasNext){
+//          val cache = ite.next()
+//          if ( cache.outputFilename.equalsIgnoreCase(inputFileName)){
+//            deletefromDatabase(cache)
+//            repositorySize -= cache.sizeOfOutputData
+//            repository.remove(cache)
+//          }
+//        }
+//      }
+//    }
+//  }
 
   def getLastModifiedTimeOfFile(filePath: String): Long = {
     var modifiedTime: Long = 0
@@ -392,35 +328,35 @@ object CacheManager {
     modifiedTime
   }
 
-  def checkFilesNotModified(cacheMetaData: CacheMetaData): Boolean = {
-    val inputFileNames = cacheMetaData.root.inputFileName
-    val inputFilesLastModifiedTime = cacheMetaData.root.inputFileLastModifiedTime
-    inputFileNames.forEach(new Consumer[String] {
-      override def accept(t: String): Unit = {
-        if ( !CacheManager.getLastModifiedTimeOfFile(t).equals(
-          inputFilesLastModifiedTime.get(inputFileNames.indexOf(t)))){
-          println("CacheManager.getLastModifiedTimeOfFile(t)): " + CacheManager.getLastModifiedTimeOfFile(t))
-          println("inputFilesLastModifiedTime.get(inputFileNames.indexOf(t)): " + inputFilesLastModifiedTime.get(inputFileNames.indexOf(t)))
-          // consistency maintain
-          removeCacheFromRepository(t, "input")
-          return false
-        }
-      }
-    })
-    // 2. check output files
-    println("CacheManager.getLastModifiedTimeOfFile(cacheMetaData.outputFilename: " + CacheManager.getLastModifiedTimeOfFile(cacheMetaData.outputFilename))
-    println("cacheMetaData.outputFileLastModifiedTime): " + cacheMetaData.outputFileLastModifiedTime)
-
-    val outputFileNotModified = CacheManager.getLastModifiedTimeOfFile(cacheMetaData.outputFilename).equals(cacheMetaData.outputFileLastModifiedTime)
-    if ( outputFileNotModified ){
-      return true
-    }else{
-      // consistency maintain
-      removeCacheFromDisk(cacheMetaData.outputFilename)
-      deletefromDatabase(cacheMetaData)
-      repositorySize -= cacheMetaData.sizeOfOutputData
-      repository.remove(cacheMetaData)
-      return false
-    }
-  }
+//  def checkFilesNotModified(cacheMetaData: CacheMetaData): Boolean = {
+//    val inputFileNames = cacheMetaData.root.inputFileName
+//    val inputFilesLastModifiedTime = cacheMetaData.root.inputFileLastModifiedTime
+//    inputFileNames.forEach(new Consumer[String] {
+//      override def accept(t: String): Unit = {
+//        if ( !CacheManager.getLastModifiedTimeOfFile(t).equals(
+//          inputFilesLastModifiedTime.get(inputFileNames.indexOf(t)))){
+//          println("CacheManager.getLastModifiedTimeOfFile(t)): " + CacheManager.getLastModifiedTimeOfFile(t))
+//          println("inputFilesLastModifiedTime.get(inputFileNames.indexOf(t)): " + inputFilesLastModifiedTime.get(inputFileNames.indexOf(t)))
+//          // consistency maintain
+//          removeCacheFromRepository(t, "input")
+//          return false
+//        }
+//      }
+//    })
+//    // 2. check output files
+//    println("CacheManager.getLastModifiedTimeOfFile(cacheMetaData.outputFilename: " + CacheManager.getLastModifiedTimeOfFile(cacheMetaData.outputFilename))
+//    println("cacheMetaData.outputFileLastModifiedTime): " + cacheMetaData.outputFileLastModifiedTime)
+//
+//    val outputFileNotModified = CacheManager.getLastModifiedTimeOfFile(cacheMetaData.outputFilename).equals(cacheMetaData.outputFileLastModifiedTime)
+//    if ( outputFileNotModified ){
+//      return true
+//    }else{
+//      // consistency maintain
+//      removeCacheFromDisk(cacheMetaData.outputFilename)
+//      deletefromDatabase(cacheMetaData)
+//      repositorySize -= cacheMetaData.sizeOfOutputData
+//      repository.remove(cacheMetaData)
+//      return false
+//    }
+//  }
 }

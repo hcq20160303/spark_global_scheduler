@@ -5,9 +5,9 @@ import org.apache.spark.{SparkConf, SparkContext}
 /**
  * Created by hcq on 16-5-10.
  */
-object testWordCount2 {
+object testWordCount1 {
 
-  private val conf = new SparkConf().setAppName("WordCount2")
+  private val conf = new SparkConf().setAppName("WordCount1")
 //    .setMaster("local")
     .setMaster("spark://192.168.1.105:7077")
     .set("spark.shuffle.service.enabled", "true")
