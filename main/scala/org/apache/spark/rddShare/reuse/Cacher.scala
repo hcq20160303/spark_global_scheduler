@@ -24,7 +24,29 @@ object Cacher {
 
     cache.forEach(new Consumer[(Int, String)] {
       override def accept(che: (Int, String)): Unit = {
-        val realRDD = nodes.get(che._1).realRDD
+        var skipRDD = nodes.get(che._1).realRDD
+        if ( che._1 == (nodes.size() - 1)) {
+          println("---Cacher.cache: skip rdd ready.")
+          var stopSkip = false
+          while (!stopSkip && skipRDD != null) {
+            while (skipRDD.transformation.equals("default")) {
+              println("---Cacher.cache: skip rdd " + skipRDD.id + ": " + skipRDD.transformation)
+              skipRDD = skipRDD.dependencies(0).rdd
+              stopSkip = true
+            }
+            if (!stopSkip) {
+              if (skipRDD.dependencies != null) {
+                skipRDD = skipRDD.dependencies(0).rdd
+              } else {
+                skipRDD = null
+              }
+            }
+          }
+        }
+        var realRDD = nodes.get(che._1).realRDD
+        if ( skipRDD != null ) {
+           realRDD = skipRDD
+        }
         realRDD.isCache = true
         val cachePath = che._2
         realRDD.cache()

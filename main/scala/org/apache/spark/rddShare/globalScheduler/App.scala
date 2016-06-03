@@ -3,8 +3,8 @@ package org.apache.spark.rddShare.globalScheduler
 import java.util
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rddShare.globalScheduler.SchedulerMessages.{WaitOtherJobStarted, JobFinished, JobBegining, JobStart}
-import org.apache.spark.rddShare.reuse.{Cacher, DAGMatcherAndRewriter, SimulateRDD}
+import org.apache.spark.rddShare.globalScheduler.SchedulerMessages._
+import org.apache.spark.rddShare.reuse.{DAGMatcherAndRewriter, SimulateRDD}
 import org.apache.spark.rddShare.tool.MyUtils
 import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -22,6 +22,8 @@ class App(override val rpcEnv: RpcEnv,
   private val nodes = new util.ArrayList[SimulateRDD]
   private val indexOfDagScan = new util.ArrayList[Int]
   private val globalSchedulerEndpoint = rpcEnv.setupEndpointRef(SchedulerActor.SYSTEM_NAME, globalScheduler, SchedulerActor.ENDPOINT_NAME)
+  private var isScheduling = false
+  private var cacheNodes = new util.ArrayList[(Int, String)]
 
   override def onStart(): Unit ={
     // get the nodes and indexOfDagScan from dag
@@ -40,12 +42,14 @@ class App(override val rpcEnv: RpcEnv,
       logInfo("---receive rewrite: " + MyUtils.printArrayList(rewrite.toArray))
       // rewrite the dag corresponding the job
       DAGMatcherAndRewriter.rewriter(nodes, rewrite)
-      logInfo("App.receive.JobStart: Start cache")
-      logInfo("---receive cache: " + MyUtils.printArrayList(cache.toArray))
-      // cache the rdds in this dag
-      Cacher.cache(nodes, cache)
+//      logInfo("App.receive.JobStart: Start cache")
+//      logInfo("---receive cache: " + MyUtils.printArrayList(cache.toArray))
+//      // cache the rdds in this dag
+//      Cacher.cache(nodes, cache)
+      cacheNodes = cache
       // change the scheduling state to true, then the DAGScheduler can submit this job
       nodes.get(nodes.size()-1).realRDD.isSchedule = true
+      isScheduling = true
     }
 
     case JobFinished() => {
@@ -69,6 +73,12 @@ class App(override val rpcEnv: RpcEnv,
 
     case _ => {
       logError("---App.receive._: I can't resolve this message. There's may be an error in Global Scheduler.")
+    }
+  }
+
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case GetCacher() => {
+      context.reply(CacherNodes(nodes, cacheNodes))
     }
   }
 

@@ -47,7 +47,7 @@ object CacheManager {
   def getRepositoryCapacity = repositoryCapacity
   var repositorySize: Double = 0  // the size of repository at now
 
-  private val repository: TreeSet[CacheMetaData] = new TreeSet[CacheMetaData]()
+  private val repository = new util.ArrayList[CacheMetaData]
 
   private def initRepository: Unit = {
 
@@ -126,15 +126,17 @@ object CacheManager {
     val now = calendar.getTime()
     val current = new java.sql.Timestamp(now.getTime())
     // remove the cache in seven days ago
+    val remove = new util.ArrayList[CacheMetaData]()
     repository.forEach(new Consumer[CacheMetaData] {
       override def accept(t: CacheMetaData): Unit = {
         if ( (current.getTime - t.insertTime.getTime).toDouble/(1000*3600*24) >= 7 ){
           deletefromDatabase(t)
           repositorySize -= t.sizeOfOutputData
-          repository.remove(t)
+          remove.add(t)
         }
       }
     })
+    repository.removeAll(remove)
     if ( repositorySize + needCacheSize > repositoryCapacity ){
       // copy a repository to re-sorted
       val repoCopy = new TreeSet[CacheMetaData]( new Comparator[CacheMetaData]() with Serializable{

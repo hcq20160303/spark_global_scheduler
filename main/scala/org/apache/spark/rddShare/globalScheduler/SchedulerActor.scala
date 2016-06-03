@@ -67,7 +67,6 @@ class SchedulerActor(
 
     case JobFinished() => {
       // if a job finished, then send a start-job message to the next job
-      logInfo("Job "+(schedulingOrder(jobStarted-1))+" has finished.")
       if ( jobStarted < SchedulerActor.JOBS_NUMBER_IN_ONE_SCHEDULING ){
         val nextJob = jobsInOneScheduling(schedulingOrder(jobStarted))
         nextJob.job.send(JobStart(nextJob.rewrite, nextJob.cache))
@@ -185,6 +184,7 @@ class JobInformation(val nodes: util.ArrayList[SimulateRDD],
   val rewrite = new util.ArrayList[(Int, String)]
   // get the index of rdds which need to caching in nodes, and the cache path
   val cache = new util.ArrayList[(Int, String)]
+  cache.add((5, "/home/hcq/Documents/spark_1.5.0/output/"+ System.currentTimeMillis()))
 
 }
 

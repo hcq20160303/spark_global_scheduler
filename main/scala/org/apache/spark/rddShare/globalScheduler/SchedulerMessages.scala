@@ -14,6 +14,8 @@ object SchedulerMessages {
 //  case class JobBegining(nodes: Array[SimulateRDD], indexOfDagScan: Array[Int], job: RpcEndpointRef)
   case class JobBegining(nodes: util.ArrayList[SimulateRDD], indexOfDagScan: util.ArrayList[Int], job: RpcEndpointRef)
   case class JobFinished()
+  case class GetCacher()
+  case class CacherNodes(nodes: util.ArrayList[SimulateRDD], cache: util.ArrayList[(Int, String)])
 
   // these messages are sent by global scheduler
   case class JobStart(rewrite: util.ArrayList[(Int, String)], cache: util.ArrayList[(Int, String)])

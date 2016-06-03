@@ -14,7 +14,6 @@ object testWordCount {
     .set("spark.dynamicAllocation.enabled", "true")
     .set("spark.eventLog.enabled", "true")
     .set("spark.eventLog.dir", "/home/hcq/Documents/spark_1.6.1/eventLog")
-    .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   private val sc = new SparkContext(conf)
 
   def main(args: Array[String]) {
@@ -30,6 +29,7 @@ object testWordCount {
 //        map(word => (word, 1)).reduceByKey(_ + _)
     wordCount.saveAsTextFile("/home/hcq/Documents/spark_1.5.0/output/"+ System.currentTimeMillis()+wordCount.transformation)
 
+//    wordCount.saveAsObjectFile("/home/hcq/Documents/spark_1.6.1/output/"+ System.currentTimeMillis()+wordCount.transformation)
     stopSpark()
   }
 

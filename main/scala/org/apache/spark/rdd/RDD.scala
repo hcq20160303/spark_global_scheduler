@@ -1520,6 +1520,7 @@ abstract class RDD[T: ClassTag](
       .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
     if ( this.isCache ){
       mapRDD.isCache = true
+      mapRDD.transformation = "default"
     }
     mapRDD.saveAsSequenceFile(path)
   }

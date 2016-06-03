@@ -27,8 +27,9 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rddShare.globalScheduler.SchedulerMessages.JobFinished
+import org.apache.spark.rddShare.globalScheduler.SchedulerMessages._
 import org.apache.spark.rddShare.globalScheduler.{App, SchedulerActor}
+import org.apache.spark.rddShare.reuse.Cacher
 import org.apache.spark.rpc.{RpcEndpointRef, RpcAddress, RpcTimeout}
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.storage._
@@ -614,13 +615,14 @@ class DAGScheduler(
       appActor = rpcEnv.setupEndpoint(App.ENDPOINT_NAME+System.currentTimeMillis(),
                 new App(rpcEnv, rdd.sparkContext.appName, rpcEnv.address,
                   RpcAddress.fromSparkURL("spark://192.168.1.105:" + SchedulerActor.PORT), rdd))
-      while( !rdd.isSchedule && !newRDD.isSchedule){
+      while( !rdd.isSchedule ){
         // wait for scheduling in Global Scheduler
-        if ( rdd.newRDD != null ){
-          newRDD = rdd.newRDD.asInstanceOf[RDD[T]]
-        }
       }
+      newRDD = rdd.newRDD.asInstanceOf[RDD[T]]
       logInfo("---isSchedule: true")
+      val future = appActor.askWithRetry[CacherNodes](GetCacher())
+      logInfo("---get cache nodes.")
+      Cacher.cache(future.nodes, future.cache)
     }
     // --- hcq end ---
     val start = System.nanoTime
