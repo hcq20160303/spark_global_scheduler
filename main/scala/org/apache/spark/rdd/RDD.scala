@@ -1516,9 +1516,12 @@ abstract class RDD[T: ClassTag](
    * Save this RDD as a SequenceFile of serialized objects.
    */
   def saveAsObjectFile(path: String): Unit = withScope {
-    this.mapPartitions(iter => iter.grouped(10).map(_.toArray))
+    val mapRDD = this.mapPartitions(iter => iter.grouped(10).map(_.toArray))
       .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
-      .saveAsSequenceFile(path)
+    if ( this.isCache ){
+      mapRDD.isCache = true
+    }
+    mapRDD.saveAsSequenceFile(path)
   }
 
   /**

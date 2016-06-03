@@ -2,11 +2,11 @@ package org.apache.spark.rddShare.globalScheduler
 
 import java.io.File
 import java.util
-import java.util.function.Consumer
 
 import com.typesafe.config.ConfigFactory
-import org.apache.spark.rddShare.globalScheduler.SchedulerMessages.{JobBegining, JobFinished, JobStart}
+import org.apache.spark.rddShare.globalScheduler.SchedulerMessages.{JobBegining, JobFinished, JobStart, WaitOtherJobStarted}
 import org.apache.spark.rddShare.reuse.{CacheManager, DAGMatcherAndRewriter, SimulateRDD}
+import org.apache.spark.rddShare.tool.MyUtils
 import org.apache.spark.rpc._
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -36,56 +36,48 @@ class SchedulerActor(
 
   override def receive: PartialFunction[Any, Unit] = {
 
-    case JobBegining(nodes: util.ArrayList[SimulateRDD], indexOfDagScan: util.ArrayList[Integer], job: RpcEndpointRef) => {
-      logInfo("SchedulerActor.receive: I have got the message from " + job.name)
-      val nodesArray = new Array[SimulateRDD](nodes.size())
-      val indexOfDagScanArray = new Array[Int](indexOfDagScan.size())
-      var i=0
-      nodes.forEach(new Consumer[SimulateRDD] {
-        override def accept(t: SimulateRDD): Unit = {
-          println(t.toString())
-          nodesArray(i) = t
-          i += 1
+    case JobBegining(nodes: util.ArrayList[SimulateRDD], indexOfDagScan: util.ArrayList[Int], job: RpcEndpointRef) => {
+      if ( jobStarted != 0 ){
+        logInfo("Receive other job while there are jobs have not started. So wait it.")
+        job.send(WaitOtherJobStarted())
+      }else {
+        logInfo("SchedulerActor.receive: I have got the message from " + job.name)
+
+        val jobInfor = new JobInformation(nodes, indexOfDagScan, job)
+        jobsInOneScheduling += jobInfor
+        if (jobsInOneScheduling.length == SchedulerActor.JOBS_NUMBER_IN_ONE_SCHEDULING) {
+          schedulingBasedGA()
+          logInfo("finished scheduling. Now I must launch the first job")
+          // start the first job
+          val firstJob = jobsInOneScheduling(schedulingOrder(0))
+          firstJob.job.send(JobStart(firstJob.rewrite, firstJob.cache))
+          logInfo("---send rewrite: "+MyUtils.printArrayList(firstJob.rewrite.toArray))
+          logInfo("---send cache: "+MyUtils.printArrayList(firstJob.cache.toArray))
+          jobStarted += 1
+          logInfo("launch Job finished. Does app has received my message?")
+          //        jobConcurrentStarted.foreach(index => {
+          //          jobStarted += 1
+          //          val jobStart = jobsInOneScheduling(index)
+          //          // send message to the job so that it can start its job
+          //          jobStart.job.send(JobStart(jobStart.rewrite.toArray, jobStart.cache.toArray))
+          //        })
         }
-      })
-      i = 0
-      indexOfDagScan.forEach(new Consumer[Integer] {
-        override def accept(t: Integer): Unit = {
-          println(t.toString())
-          indexOfDagScanArray(i) = t
-          i += 1
-        }
-      })
-      logInfo("nodes: "+nodesArray.foreach(x => x.toString()))
-      logInfo("indexOfDagScan: "+indexOfDagScanArray.foreach(x => x.toString()))
-      val jobInfor = new JobInformation(nodesArray, indexOfDagScanArray, job)
-      jobsInOneScheduling += jobInfor
-      if ( jobsInOneScheduling.length == SchedulerActor.JOBS_NUMBER_IN_ONE_SCHEDULING ){
-        schedulingBasedGA()
-        logInfo("finished scheduling. Now I must launch the first job")
-        // start the first job
-        val firstJob = jobsInOneScheduling(schedulingOrder(0))
-        firstJob.job.send(JobStart(firstJob.rewrite.toArray, firstJob.cache.toArray))
-        jobStarted += 1
-        logInfo("launch Job finished. Does app has received my message?")
-//        jobConcurrentStarted.foreach(index => {
-//          jobStarted += 1
-//          val jobStart = jobsInOneScheduling(index)
-//          // send message to the job so that it can start its job
-//          jobStart.job.send(JobStart(jobStart.rewrite.toArray, jobStart.cache.toArray))
-//        })
-        while ( jobStarted < SchedulerActor.JOBS_NUMBER_IN_ONE_SCHEDULING ){
-          // wait for all the jobs started in this one scheduling
-        }
-        jobsInOneScheduling.clear()
-        jobStarted = 0
       }
     }
 
     case JobFinished() => {
       // if a job finished, then send a start-job message to the next job
-      jobsInOneScheduling(schedulingOrder(jobStarted))
-      jobStarted += 1
+      logInfo("Job "+(schedulingOrder(jobStarted-1))+" has finished.")
+      if ( jobStarted < SchedulerActor.JOBS_NUMBER_IN_ONE_SCHEDULING ){
+        val nextJob = jobsInOneScheduling(schedulingOrder(jobStarted))
+        nextJob.job.send(JobStart(nextJob.rewrite, nextJob.cache))
+        jobStarted += 1
+      }
+      if ( jobStarted == SchedulerActor.JOBS_NUMBER_IN_ONE_SCHEDULING ){
+        jobsInOneScheduling.clear()
+        jobStarted = 0
+        logInfo("start receive next scheduling job.")
+      }
 //      jobsInOneScheduling.find(p => p.job.equals(job)) match {
 //        case Some(job: JobInformation) => {
 //          job.jobsDependentThisJob.foreach( jobInfo => {
@@ -160,7 +152,7 @@ class SchedulerActor(
         val pre = schedulingOrder(j)
         if ( reuse(late)(pre) > maxReuse ){
           maxReuse = reuse(late)(pre)
-          maxReuseIndex = j
+          maxReuseIndex = pre
         }
       }
       // has find the max reusing job
@@ -170,27 +162,29 @@ class SchedulerActor(
         val reusingJob = jobsInOneScheduling(late)
         val reusedJob = jobsInOneScheduling(maxReuseIndex)
         val (rewrite, cache) = DAGMatcherAndRewriter.matchTwoDags(reusingJob, reusedJob)
-        val cachePath = CacheManager.getRepositoryBasePath + reusedJob.job.name + reusedJob.nodes(cache._2).transformation
+        logInfo("rewrite: " + rewrite.toString())
+        logInfo("cache: " + cache.toString())
+        val cachePath = CacheManager.getRepositoryBasePath + reusedJob.job.name + reusedJob.nodes.get(cache._2).transformation + System.currentTimeMillis()
         val cacheInfo = (cache._2, cachePath)
-        reusedJob.cache += cacheInfo
+        reusedJob.cache.add(cacheInfo)
         val rewriteInfo = (rewrite._2, cachePath)
-        reusingJob.rewrite += rewriteInfo
+        reusingJob.rewrite.add(rewriteInfo)
       }
     }
   }
 }
 
-class JobInformation(val nodes: Array[SimulateRDD],
-                     val indexOfDagScan: Array[Int],
+class JobInformation(val nodes: util.ArrayList[SimulateRDD],
+                     val indexOfDagScan: util.ArrayList[Int],
                      val job: RpcEndpointRef){
 
 //  // jobs which reusing the cache of this job
 //  val jobsDependentThisJob = new ArrayBuffer[JobInformation]()
   // get the index of rdds which need to reusing the cache from other jobs in nodes,
   // and the path of reusing cache also need to store
-  val rewrite = new ArrayBuffer[(Int, String)]
+  val rewrite = new util.ArrayList[(Int, String)]
   // get the index of rdds which need to caching in nodes, and the cache path
-  val cache = new ArrayBuffer[(Int, String)]
+  val cache = new util.ArrayList[(Int, String)]
 
 }
 

@@ -14,6 +14,7 @@ object testWordCount {
     .set("spark.dynamicAllocation.enabled", "true")
     .set("spark.eventLog.enabled", "true")
     .set("spark.eventLog.dir", "/home/hcq/Documents/spark_1.6.1/eventLog")
+    .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   private val sc = new SparkContext(conf)
 
   def main(args: Array[String]) {

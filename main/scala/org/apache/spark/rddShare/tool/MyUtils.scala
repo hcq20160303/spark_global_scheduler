@@ -52,4 +52,8 @@ object MyUtils {
     val ois = new ObjectInputStream(bis)
     ois.readObject.asInstanceOf[T]
   }
+
+  def printArrayList(list: Array[AnyRef]): Unit ={
+    list.foreach(println)
+  }
 }

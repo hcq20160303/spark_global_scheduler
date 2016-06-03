@@ -611,7 +611,7 @@ class DAGScheduler(
     var appActor: RpcEndpointRef = null
     if ( !rdd.isCache ){
       val rpcEnv = SparkEnv.get.rpcEnv
-      appActor = rpcEnv.setupEndpoint(App.ENDPOINT_NAME+rdd.transformation,
+      appActor = rpcEnv.setupEndpoint(App.ENDPOINT_NAME+System.currentTimeMillis(),
                 new App(rpcEnv, rdd.sparkContext.appName, rpcEnv.address,
                   RpcAddress.fromSparkURL("spark://192.168.1.105:" + SchedulerActor.PORT), rdd))
       while( !rdd.isSchedule && !newRDD.isSchedule){

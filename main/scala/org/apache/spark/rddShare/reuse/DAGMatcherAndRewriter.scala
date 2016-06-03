@@ -1,6 +1,7 @@
 package org.apache.spark.rddShare.reuse
 
 import java.util
+import java.util.function.Consumer
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rddShare.globalScheduler.JobInformation
@@ -25,15 +26,17 @@ object DAGMatcherAndRewriter {
     var maxMatch = -1
 
     println("DAGMatcherAndRewriter.matchTwoDags: ")
-    println("dag1.nodes.toString: "+dag1.nodes.foreach(x => x.toString()))
-    println("dag2.nodes.toString: "+dag2.nodes.foreach(x => x.toString()))
-    for ( id1 <- indexOfDagScan1 ){
-      for ( id2 <- indexOfDagScan2){
+    val indexOfDagScan1Ite = indexOfDagScan1.iterator()
+    while ( indexOfDagScan1Ite.hasNext ){
+      val id1 = indexOfDagScan1Ite.next()
+      val indexOfDagScan2Ite = indexOfDagScan2.iterator()
+      while ( indexOfDagScan2Ite.hasNext ){
+        val id2 = indexOfDagScan2Ite.next()
         var isMatch = true
         var id1Copy = id1
         var id2Copy = id2
-        while ( (id1Copy < nodes1.length) && (id2Copy < nodes2.length) && isMatch){
-          if ( nodes1(id1Copy).equals(nodes2(id2Copy)) ){
+        while ( (id1Copy < nodes1.size()) && (id2Copy < nodes2.size()) && isMatch){
+          if ( nodes1.get(id1Copy).equals(nodes2.get(id2Copy)) ){
             id1Copy += 1
             id2Copy += 1
           }else{
@@ -61,20 +64,24 @@ object DAGMatcherAndRewriter {
    * @param nodes: the nodes of dag needed to rewrite
    * @param rewrite: the index of rewrite nodes and the path of reusing cache
    */
-  def rewriter(nodes: Array[SimulateRDD], rewrite: Array[(Int, String)]): Unit ={
-    rewrite.foreach( re => {
-      val cachePath = re._2
-      val realRDD = nodes(re._1).realRDD
-      val rewriterRDD = realRDD.sparkContext.objectFile(cachePath, realRDD.partitions.size)
-      val parent = nodes(re._1).realRDDparent
-      if ( parent == null ){
-        realRDD.newRDD = rewriterRDD
-      }else{
-        parent.changeDependeces(rewriterRDD)
+  def rewriter(nodes: util.ArrayList[SimulateRDD], rewrite: util.ArrayList[(Int, String)]): Unit ={
+    rewrite.forEach(new Consumer[(Int, String)] {
+      override def accept(re: (Int, String)): Unit = {
+        val cachePath = re._2
+        val realRDD = nodes.get(re._1).realRDD
+        val rewriterRDD = realRDD.sparkContext.objectFile(cachePath, realRDD.partitions.size)
+//        val rewriterRDD = realRDD.sparkContext.textFile(cachePath, realRDD.partitions.size)
+        val parent = nodes.get(re._1).realRDDparent
+        if ( parent == null ){
+          realRDD.newRDD = rewriterRDD
+        }else{
+          parent.changeDependeces(rewriterRDD)
+        }
+        // update the database
+        CacheManager.updatefromDatabase(s"update repository set reuse = reuse + 1 where outputFilename = '$cachePath'")
       }
-      // update the database
-      CacheManager.updatefromDatabase(s"update repository set reuse = reuse + 1 where outputFilename = $cachePath")
     })
+
   }
 
   /**
@@ -84,7 +91,7 @@ object DAGMatcherAndRewriter {
    * @param nodesList: the nodes of this dag
    * @param indexOfDagScan: the index of nodes which read data
    */
-  def transformDAGtoList( parent: RDD[_], node: RDD[_], nodesList: util.ArrayList[SimulateRDD], indexOfDagScan: util.ArrayList[Integer] ): Unit = {
+  def transformDAGtoList( parent: RDD[_], node: RDD[_], nodesList: util.ArrayList[SimulateRDD], indexOfDagScan: util.ArrayList[Int] ): Unit = {
 
     if ( node == null ){
       return
@@ -120,7 +127,5 @@ object DAGMatcherAndRewriter {
       simulateRDD.inputFileLastModifiedTime.addAll(nodesList.get(child.indexOfnodesList).inputFileLastModifiedTime)
       simulateRDD.allTransformation.addAll(nodesList.get(child.indexOfnodesList).allTransformation)
     })
-    println("nodesList: "+nodesList.size())
-    println("indexOfDagScan: "+indexOfDagScan.size())
   }
 }

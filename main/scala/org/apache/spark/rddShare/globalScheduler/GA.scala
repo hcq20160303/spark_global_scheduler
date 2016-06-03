@@ -40,7 +40,7 @@ class GA( val jobNum: Int    // the number of dags
         val (jobiMatchIndex, _) = DAGMatcherAndRewriter.matchTwoDags(jobs(i), jobs(j))
         // the calculating way of reuse is the number of match nodes divided the number of nodes in a job,
         // as we can't get the information of the input data, so we simply compute the reusing in this way
-        reuse(i)(j) = (jobiMatchIndex._2 - jobiMatchIndex._1 + 1)/(jobs(i).nodes.length)
+        reuse(i)(j) = (jobiMatchIndex._2 - jobiMatchIndex._1 + 1)/(jobs(i).nodes.size())
         reuse(j)(i) = reuse(i)(j)
         println("reuse(i)(j): "+reuse(i)(j))
       }

@@ -2,6 +2,7 @@ package org.apache.spark.rddShare.reuse
 
 import java.io._
 import java.sql.{DriverManager, ResultSet}
+import java.util
 import java.util._
 import java.util.function.Consumer
 
@@ -13,14 +14,12 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization._
 
-import scala.tools.nsc.Properties
-
 /**
  * Created by hcq on 16-5-9.
  */
 object CacheManager {
 
-  val confPath = Properties.envOrElse("SPARK_HOME", "/home/hcq/Desktop/spark_1.5.0")
+  val confPath = sys.env.getOrElse("SPARK_HOME", "/home/hcq/Desktop/spark_1.5.0")
   val conf = ConfigFactory.parseFile(new File(confPath + "/conf/rddShare/default.conf"))
 
   // Setup the database connection
@@ -62,8 +61,8 @@ object CacheManager {
         val id = rs.getInt("id")
         // deserilize the nodesList & indexofDagScan
         implicit val formats = Serialization.formats(NoTypeHints)
-        val nodesList = read[Array[SimulateRDD]](rs.getString("nodesList"))
-        val indexOfDagScan = read[Array[Int]](rs.getString("indexOfDagScan"))
+        val nodesList = read[util.ArrayList[SimulateRDD]](rs.getString("nodesList"))
+        val indexOfDagScan = read[util.ArrayList[Int]](rs.getString("indexOfDagScan"))
         val outputFileLastModifiedTime = rs.getLong("outputFileLastModifiedTime")
         val sizeOfOutputData = rs.getDouble("sizeOfOutputData")
         val exeTimeOfDag = rs.getLong("exeTimeOfDag")
@@ -83,7 +82,7 @@ object CacheManager {
     println("repositorySize: "+ repositorySize + "\trepository.size(): " + repository.size())
     repository.forEach(new Consumer[CacheMetaData] {
       override def accept(t: CacheMetaData): Unit = {
-        println("nodesList(0).inputFileName:" + t.nodesList(0).inputFileName + "\t" +
+        println("nodesList(0).inputFileName:" + t.nodesList.get(0).inputFileName + "\t" +
         "sizoOfOutputData: " + t.sizeOfOutputData+ "\tuse: " + t.reuse)
       }
     })
@@ -109,7 +108,7 @@ object CacheManager {
     println("CacheManager.checkCapacityEnoughElseReplace: repository contents")
     repository.forEach(new Consumer[CacheMetaData] {
       override def accept(t: CacheMetaData): Unit = {
-        println("nodesList(0).inputFileName:" + t.nodesList(0).inputFileName + "\t" +
+        println("nodesList(0).inputFileName:" + t.nodesList.get(0).inputFileName + "\t" +
           "sizoOfOutputData: " + t.sizeOfOutputData + "\tuse: " + t.reuse)
       }
     })
@@ -169,14 +168,14 @@ object CacheManager {
               }else if ( o1.sizeOfOutputData > o2.sizeOfOutputData ){
                 return 1
               }else {
-                if ( o1.nodesList.length < o2.nodesList.length){  // rule 4
+                if ( o1.nodesList.size() < o2.nodesList.size()){  // rule 4
                   return -1
-                }else if ( o1.nodesList.length > o2.nodesList.length){
+                }else if ( o1.nodesList.size() > o2.nodesList.size()){
                   return 1
                 }else{
-                  if ( o1.indexOfDagScan.length < o2.indexOfDagScan.length ){  // rule 5
+                  if ( o1.indexOfDagScan.size() < o2.indexOfDagScan.size() ){  // rule 5
                     return -1
-                  }else if ( o1.indexOfDagScan.length > o2.indexOfDagScan.length ){
+                  }else if ( o1.indexOfDagScan.size() > o2.indexOfDagScan.size() ){
                     return 1
                   }else{
                     return o1.outputFilename.compare(o2.outputFilename)   // rule 5
